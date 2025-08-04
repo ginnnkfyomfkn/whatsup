@@ -1,44 +1,67 @@
-const qrcode = require('qrcode');
+const express = require("express");
+const { makeWASocket, useMultiFileAuthState } = require("@whiskeysockets/baileys");
+const pino = require("pino");
+const PhoneNumber = require("awesome-phonenumber");
+const chalk = require("chalk");
+const path = require("path");
 
-app.post('/connect', async (req, res) => {
-  try {
-    const { phoneNumber } = req.body;
-    console.log(`Attempting to connect with phone number: ${phoneNumber}`);
-    const { state, saveCreds } = await useMultiFileAuthState('/opt/render/project/src/session');
-    MznKing = makeWASocket({
-      logger: pino({ level: 'silent' }),
-      auth: {
-        creds: state.creds,
-        keys: makeCacheableSignalKeyStore(state.keys, pino({ level: 'fatal' })),
-      },
-      markOnlineOnConnect: true,
+const app = express();
+const port = process.env.PORT || 3000;
+
+// Serve static files (HTML)
+app.use(express.static(path.join(__dirname, "views")));
+app.use(express.urlencoded({ extended: true }));
+
+// Home page
+app.get("/", (req, res) => {
+    res.sendFile(path.join(__dirname, "views", "index.html"));
+});
+
+// Handle pairing code request
+app.post("/generate-pairing-code", async (req, res) => {
+    let phoneNumber = req.body.phoneNumber?.replace(/[^0-9]/g, "");
+    if (!phoneNumber) {
+        return res.sendFile(path.join(__dirname, "views", "result.html"), {
+            error: "Please enter a phone number.",
+        });
+    }
+
+    // Validate phone number
+    if (!PhoneNumber("+" + phoneNumber).isValid()) {
+        return res.sendFile(path.join(__dirname, "views", "result.html"), {
+            error: "Invalid phone number. Use international format (e.g., 6281376552730).",
+        });
+    }
+
+    // Initialize Baileys
+    const { state } = await useMultiFileAuthState("./session");
+    const sock = makeWASocket({
+        logger: pino({ level: "silent" }),
+        printQRInTerminal: false,
+        auth: state,
     });
 
-    if (!MznKing.authState.creds.registered) {
-      phoneNumber = phoneNumber.replace(/[^0-9]/g, '');
-      if (!phoneNumber.startsWith('91')) {
-        throw new Error('Phone number must start with country code, e.g., +91');
-      }
-      console.log(`Waiting for QR code...`);
-      MznKing.ev.on('connection.update', async (update) => {
-        const { qr } = update;
-        if (qr) {
-          const qrImage = await qrcode.toDataURL(qr);
-          res.json({ status: 'pairing', qr: qrImage });
-        }
-      });
-      MznKing.ev.on('creds.update', saveCreds);
-    } else {
-      MznKing.ev.on('connection.update', async (s) => {
-        const { connection } = s;
-        if (connection === 'open') {
-          console.log(chalk.yellow('Your WhatsApp Login Successfully'));
-        }
-      });
-      res.json({ status: 'connected' });
+    try {
+        let code = await sock.requestPairingCode(phoneNumber);
+        code = code?.match(/.{1,4}/g)?.join("-") || code;
+        res.sendFile(path.join(__dirname, "views", "result.html"), {
+            code: code,
+            instructions: `
+                Please enter this code in your WhatsApp app:
+                1. Open WhatsApp
+                2. Go to Settings > Linked Devices
+                3. Tap "Link a Device"
+                4. Enter the code: ${code}
+            `,
+        });
+    } catch (error) {
+        console.error("Error requesting pairing code:", error);
+        res.sendFile(path.join(__dirname, "views", "result.html"), {
+            error: "Failed to generate pairing code. Please try again.",
+        });
     }
-  } catch (error) {
-    console.error(`Connection error: ${error.message}`, error.stack);
-    res.status(500).json({ error: error.message });
-  }
+});
+
+app.listen(port, () => {
+    console.log(chalk.green(`Server running on port ${port}`));
 });
