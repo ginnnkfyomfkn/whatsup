@@ -1,3 +1,5 @@
+const qrcode = require('qrcode');
+
 app.post('/connect', async (req, res) => {
   try {
     const { phoneNumber } = req.body;
@@ -17,24 +19,24 @@ app.post('/connect', async (req, res) => {
       if (!phoneNumber.startsWith('91')) {
         throw new Error('Phone number must start with country code, e.g., +91');
       }
-      console.log(`Requesting pairing code for ${phoneNumber}...`);
-      let code = await MznKing.requestPairingCode(phoneNumber);
-      console.log(`Raw code received: ${code}`);
-      code = code?.match(/.{1,4}/g)?.join('-') || code;
-      console.log(`Formatted code: ${code}`);
-      if (!code) throw new Error('Failed to generate pairing code');
+      console.log(`Waiting for QR code...`);
+      MznKing.ev.on('connection.update', async (update) => {
+        const { qr } = update;
+        if (qr) {
+          const qrImage = await qrcode.toDataURL(qr);
+          res.json({ status: 'pairing', qr: qrImage });
+        }
+      });
       MznKing.ev.on('creds.update', saveCreds);
-      return res.json({ status: 'pairing', code });
+    } else {
+      MznKing.ev.on('connection.update', async (s) => {
+        const { connection } = s;
+        if (connection === 'open') {
+          console.log(chalk.yellow('Your WhatsApp Login Successfully'));
+        }
+      });
+      res.json({ status: 'connected' });
     }
-
-    MznKing.ev.on('connection.update', async (s) => {
-      const { connection } = s;
-      if (connection === 'open') {
-        console.log(chalk.yellow('Your WhatsApp Login Successfully'));
-      }
-    });
-    MznKing.ev.on('creds.update', saveCreds);
-    res.json({ status: 'connected' });
   } catch (error) {
     console.error(`Connection error: ${error.message}`, error.stack);
     res.status(500).json({ error: error.message });
