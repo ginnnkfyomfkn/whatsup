@@ -8,7 +8,7 @@ const path = require("path");
 const app = express();
 const port = process.env.PORT || 3000;
 
-// Serve static files (HTML)
+// Serve static files and parse form data
 app.use(express.static(path.join(__dirname, "views")));
 app.use(express.urlencoded({ extended: true }));
 
@@ -21,14 +21,12 @@ app.get("/", (req, res) => {
 app.post("/generate-pairing-code", async (req, res) => {
     let phoneNumber = req.body.phoneNumber?.replace(/[^0-9]/g, "");
     if (!phoneNumber) {
-        return res.sendFile(path.join(__dirname, "views", "result.html"), {
-            error: "Please enter a phone number.",
-        });
+        return res.render("result", { error: "Please enter a phone number." });
     }
 
-    // Validate phone number
+    // Validate phone number using awesome-phonenumber
     if (!PhoneNumber("+" + phoneNumber).isValid()) {
-        return res.sendFile(path.join(__dirname, "views", "result.html"), {
+        return res.render("result", {
             error: "Invalid phone number. Use international format (e.g., 6281376552730).",
         });
     }
@@ -44,7 +42,8 @@ app.post("/generate-pairing-code", async (req, res) => {
     try {
         let code = await sock.requestPairingCode(phoneNumber);
         code = code?.match(/.{1,4}/g)?.join("-") || code;
-        res.sendFile(path.join(__dirname, "views", "result.html"), {
+        console.log(chalk.black(chalk.bgGreen(`Your Pairing Code: `)), chalk.black(chalk.white(code)));
+        res.render("result", {
             code: code,
             instructions: `
                 Please enter this code in your WhatsApp app:
@@ -56,9 +55,7 @@ app.post("/generate-pairing-code", async (req, res) => {
         });
     } catch (error) {
         console.error("Error requesting pairing code:", error);
-        res.sendFile(path.join(__dirname, "views", "result.html"), {
-            error: "Failed to generate pairing code. Please try again.",
-        });
+        res.render("result", { error: "Failed to generate pairing code. Please try again." });
     }
 });
 
