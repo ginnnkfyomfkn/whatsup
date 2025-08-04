@@ -8,6 +8,11 @@ const port = process.env.PORT || 3000;
 
 app.use(express.static("public"));
 
+// Ensure 'public' directory exists
+if (!fs.existsSync("public")) {
+  fs.mkdirSync("public");
+}
+
 app.get("/", (req, res) => {
   res.sendFile(__dirname + "/pair.html");
 });
