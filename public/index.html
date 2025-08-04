@@ -1,52 +1,28 @@
-<!DOCTYPE html>
-<html>
-<head>
-  <title>WhatsApp Bot - Connect</title>
-  <style>
-    body { font-family: Arial; margin: 20px; }
-    .form-group { margin-bottom: 15px; }
-    button { padding: 10px; margin-top: 10px; }
-    #output { margin-top: 20px; white-space: pre-wrap; color: #333; }
-    .success { color: green; }
-    .error { color: red; }
-  </style>
-</head>
-<body>
-  <h1>WhatsApp Bot - Connect</h1>
-  <div class="form-group">
-    <label>Phone Number (with country code, e.g., +91xxxxxxxxxx):</label>
-    <input type="text" id="phoneNumber" placeholder="+91xxxxxxxxxx">
-    <button onclick="connect()">Connect to WhatsApp</button>
-  </div>
-  <div id="output"></div>
+<script>
+  async function connect() {
+    const phoneNumber = document.getElementById('phoneNumber').value;
+    const output = document.getElementById('output');
+    output.textContent = 'Connecting...';
+    output.className = '';
 
-  <script>
-    async function connect() {
-      const phoneNumber = document.getElementById('phoneNumber').value;
-      const output = document.getElementById('output');
-      output.textContent = 'Connecting...';
-      output.className = '';
+    try {
+      const response = await fetch('/connect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phoneNumber })
+      });
+      const result = await response.json();
 
-      try {
-        const response = await fetch('/connect', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ phoneNumber })
-        });
-        const result = await response.json();
-
-        if (result.status === 'pairing') {
-          output.textContent = `Pairing Code: ${result.code}\nScan this code in WhatsApp > Linked Devices`;
-          output.className = 'success';
-        } else if (result.status === 'connected') {
-          output.textContent = 'Successfully connected to WhatsApp!';
-          output.className = 'success';
-        }
-      } catch (error) {
-        output.textContent = `Error: ${error.message}`;
-        output.className = 'error';
+      if (result.status === 'pairing') {
+        output.innerHTML = `QR Code: <img src="${result.qr}" alt="QR Code" style="max-width: 200px;"><br>Scan this in WhatsApp > Linked Devices`;
+        output.className = 'success';
+      } else if (result.status === 'connected') {
+        output.textContent = 'Successfully connected to WhatsApp!';
+        output.className = 'success';
       }
+    } catch (error) {
+      output.textContent = `Error: ${error.message}`;
+      output.className = 'error';
     }
-  </script>
-</body>
-</html>
+  }
+</script>
