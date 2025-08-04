@@ -1,5 +1,4 @@
 const express = require('express');
-const fileUpload = require('express-fileupload');
 const { makeWASocket, useMultiFileAuthState, makeCacheableSignalKeyStore } = require('@whiskeysockets/baileys');
 const chalk = require('chalk');
 const pino = require('pino');
@@ -8,14 +7,10 @@ const path = require('path');
 
 const app = express();
 app.use(express.json());
-app.use(fileUpload());
-app.use(express.static('public')); // Serve static files (HTML, JS, CSS)
+app.use(express.static('public')); // Serve static files
 
-let MznKing = null; // WhatsApp client instance
-let messages = []; // Store messages
-let sendMessageInterval = null; // Store interval for message sending
+let MznKing = null;
 
-// Connect to WhatsApp
 const connect = async (phoneNumber) => {
   const { state, saveCreds } = await useMultiFileAuthState('/opt/render/project/src/session');
   MznKing = makeWASocket({
@@ -27,7 +22,6 @@ const connect = async (phoneNumber) => {
     markOnlineOnConnect: true,
   });
 
-  // Handle pairing code
   if (!MznKing.authState.creds.registered) {
     phoneNumber = phoneNumber.replace(/[^0-9]/g, '');
     if (!phoneNumber.startsWith('91')) {
@@ -39,12 +33,9 @@ const connect = async (phoneNumber) => {
   }
 
   MznKing.ev.on('connection.update', async (s) => {
-    const { connection, lastDisconnect } = s;
+    const { connection } = s;
     if (connection === 'open') {
-      console.log(chalk.yellow('WhatsApp Connected Successfully'));
-    }
-    if (connection === 'close' && lastDisconnect?.error?.output?.statusCode !== 401) {
-      setTimeout(() => connect(phoneNumber), 5000);
+      console.log(chalk.yellow('Your WhatsApp Login Successfully'));
     }
   });
 
@@ -52,59 +43,7 @@ const connect = async (phoneNumber) => {
   return { status: 'connected' };
 };
 
-// Read messages from files
-const readMessagesFromFiles = async (filePaths) => {
-  let messages = [];
-  for (const filePath of filePaths) {
-    try {
-      const data = await fs.readFile(path.join(__dirname, 'uploads', filePath), 'utf-8');
-      messages = messages.concat(data.split('\n').filter(line => line.trim() !== ''));
-    } catch (err) {
-      console.error(`Error reading file ${filePath}:`, err);
-    }
-  }
-  return messages;
-};
-
-// Send messages
-const sendMessageInfinite = async (target, targetName, intervalTime, filePaths) => {
-  messages = await readMessagesFromFiles(filePaths);
-  if (messages.length === 0) throw new Error('No messages found');
-
-  let currentIndex = 0;
-  const colors = [chalk.green, chalk.yellow, chalk.white];
-  let colorIndex = 0;
-
-  if (sendMessageInterval) clearInterval(sendMessageInterval); // Clear previous interval
-
-  sendMessageInterval = setInterval(async () => {
-    try {
-      const rawMessage = messages[currentIndex];
-      const time = new Date().toLocaleTimeString();
-      const simpleMessage = `${targetName} ${rawMessage}`;
-      const formattedMessage = `
-=======================================
-Time ==> ${time}
-Target name ==> ${targetName}
-Target No ==> ${target}
-Message ==> ${rawMessage}
-=======================================
-      `;
-      if (/^\d+$/.test(target)) {
-        await MznKing.sendMessage(target + '@s.whatsapp.net', { text: simpleMessage });
-      } else {
-        await MznKing.sendMessage(target, { text: simpleMessage });
-      }
-      console.log(colors[colorIndex](`Message sent:\n${formattedMessage}`));
-      colorIndex = (colorIndex + 1) % colors.length;
-      currentIndex = (currentIndex + 1) % messages.length;
-    } catch (error) {
-      console.error(`Error sending message: ${error}`);
-    }
-  }, intervalTime * 1000);
-};
-
-// API Endpoints
+// API Endpoint for connection
 app.post('/connect', async (req, res) => {
   try {
     const { phoneNumber } = req.body;
@@ -115,32 +54,11 @@ app.post('/connect', async (req, res) => {
   }
 });
 
-app.post('/send-messages', async (req, res) => {
-  try {
-    const { target, targetName, intervalTime, fileNames } = req.body;
-    if (!MznKing) throw new Error('WhatsApp not connected');
-    await sendMessageInfinite(target, targetName, parseInt(intervalTime), fileNames);
-    res.json({ status: 'started' });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
+// Health check (optional for Render)
+app.get('/health', (req, res) => {
+  res.json({ status: MznKing ? 'connected' : 'disconnected' });
 });
 
-app.post('/upload', async (req, res) => {
-  try {
-    if (!req.files || Object.keys(req.files).length === 0) {
-      return res.status(400).json({ error: 'No files uploaded' });
-    }
-    const file = req.files.file;
-    const uploadPath = path.join(__dirname, 'uploads', file.name);
-    await file.mv(uploadPath);
-    res.json({ status: 'uploaded', fileName: file.name });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// Start server
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
