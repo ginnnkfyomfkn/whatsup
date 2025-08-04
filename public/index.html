@@ -1,45 +1,32 @@
 <!DOCTYPE html>
 <html>
 <head>
-  <title>WhatsApp Bot</title>
+  <title>WhatsApp Bot - Connect</title>
   <style>
     body { font-family: Arial; margin: 20px; }
     .form-group { margin-bottom: 15px; }
     button { padding: 10px; margin-top: 10px; }
-    #output { margin-top: 20px; white-space: pre-wrap; }
+    #output { margin-top: 20px; white-space: pre-wrap; color: #333; }
+    .success { color: green; }
+    .error { color: red; }
   </style>
 </head>
 <body>
-  <h1>WhatsApp Bot Control Panel</h1>
+  <h1>WhatsApp Bot - Connect</h1>
   <div class="form-group">
     <label>Phone Number (with country code, e.g., +91xxxxxxxxxx):</label>
     <input type="text" id="phoneNumber" placeholder="+91xxxxxxxxxx">
     <button onclick="connect()">Connect to WhatsApp</button>
   </div>
-  <div class="form-group">
-    <label>Target (Phone Number or Group ID):</label>
-    <input type="text" id="target" placeholder="Phone or Group ID">
-  </div>
-  <div class="form-group">
-    <label>Target Name:</label>
-    <input type="text" id="targetName" placeholder="Target Name">
-  </div>
-  <div class="form-group">
-    <label>Interval Time (seconds):</label>
-    <input type="number" id="intervalTime" placeholder="60">
-  </div>
-  <div class="form-group">
-    <label>Message File:</label>
-    <input type="file" id="fileInput" accept=".txt">
-    <button onclick="uploadFile()">Upload File</button>
-  </div>
-  <button onclick="startSending()">Start Sending Messages</button>
   <div id="output"></div>
 
   <script>
     async function connect() {
       const phoneNumber = document.getElementById('phoneNumber').value;
       const output = document.getElementById('output');
+      output.textContent = 'Connecting...';
+      output.className = '';
+
       try {
         const response = await fetch('/connect', {
           method: 'POST',
@@ -47,49 +34,17 @@
           body: JSON.stringify({ phoneNumber })
         });
         const result = await response.json();
+
         if (result.status === 'pairing') {
           output.textContent = `Pairing Code: ${result.code}\nScan this code in WhatsApp > Linked Devices`;
-        } else {
-          output.textContent = 'Connected to WhatsApp!';
+          output.className = 'success';
+        } else if (result.status === 'connected') {
+          output.textContent = 'Successfully connected to WhatsApp!';
+          output.className = 'success';
         }
       } catch (error) {
         output.textContent = `Error: ${error.message}`;
-      }
-    }
-
-    async function uploadFile() {
-      const fileInput = document.getElementById('fileInput');
-      const output = document.getElementById('output');
-      const formData = new FormData();
-      formData.append('file', fileInput.files[0]);
-      try {
-        const response = await fetch('/upload', {
-          method: 'POST',
-          body: formData
-        });
-        const result = await response.json();
-        output.textContent = `File uploaded: ${result.fileName}`;
-      } catch (error) {
-        output.textContent = `Error: ${error.message}`;
-      }
-    }
-
-    async function startSending() {
-      const target = document.getElementById('target').value;
-      const targetName = document.getElementById('targetName').value;
-      const intervalTime = document.getElementById('intervalTime').value;
-      const fileName = document.getElementById('fileInput').files[0]?.name;
-      const output = document.getElementById('output');
-      try {
-        const response = await fetch('/send-messages', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ target, targetName, intervalTime, fileNames: [fileName] })
-        });
-        const result = await response.json();
-        output.textContent = `Status: ${result.status}`;
-      } catch (error) {
-        output.textContent = `Error: ${error.message}`;
+        output.className = 'error';
       }
     }
   </script>
